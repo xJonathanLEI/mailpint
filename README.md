@@ -26,6 +26,8 @@ Add the binding to your Wrangler configuration:
 
 No separate database or frontend deployment is needed. Each Worker has its own inbox. See [`examples/worker`](examples/worker) for a complete host.
 
+External HTTP(S) images load by default, including CSS backgrounds. To block them, add `"vars": { "MAILPINT_BLOCK_EXTERNAL_IMAGES": true }` to your Wrangler configuration. Boolean values and the strings `"true"` and `"false"` are accepted. Embedded raster images work in either mode.
+
 ## Usage
 
 ```sh
@@ -55,7 +57,7 @@ Open the same URL in your browser to filter messages, view HTML or plain text, m
 
 Omitted or empty `IDs` applies updates/deletions to the whole inbox. Unsupported fields and query parameters are rejected. SMTP, MIME ingestion, attachments, Cc/Bcc, custom headers, tags, forwarding, and Mailpit search are not supported. Message `Size` is the stored JSON size, not a MIME size.
 
-Requests are limited to 1 MiB. The inbox keeps up to 500 messages and 20 MiB of message data; messages expire after seven days, with cleanup on API access. HTML previews block scripts and automatic remote resources; HTTP(S) links open in a new tab.
+Requests are limited to 1 MiB. The inbox keeps up to 500 messages and 20 MiB of message data; messages expire after seven days, with cleanup on API access. HTML previews block scripts, forms, nested frames and external stylesheets; HTTP(S) links open in a new tab.
 
 There is no authentication: anyone with the URL can send, read, and delete mail.
 

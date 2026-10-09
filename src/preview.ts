@@ -1,9 +1,7 @@
 import { commonHeaders } from "./http.js";
 
 // This document is only served with this response CSP and an opaque iframe
-// sandbox. Inline email CSS is preserved; all automatic network access is denied.
-export const previewPolicy =
-  "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-popups allow-popups-to-escape-sandbox";
+// sandbox. Inline email CSS is preserved; remote images are configurable.
 
 const allowedTags = new Set(
   "html head body title style a abbr address article aside b bdi bdo blockquote br caption center code col colgroup dd del details div dl dt em figcaption figure font footer h1 h2 h3 h4 h5 h6 header hr i img ins kbd li main mark nav ol p pre q s samp section small span strike strong sub summary sup table tbody td tfoot th thead time tr tt u ul wbr".split(
@@ -21,7 +19,9 @@ const allowedAttributes = new Set(
   ),
 );
 
-export function preview(html: string) {
+export function preview(html: string, blockExternalImages = false) {
+  const imageSources = blockExternalImages ? "data:" : "data: http: https:";
+  const policy = `default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src ${imageSources}; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-popups allow-popups-to-escape-sandbox`;
   const source =
     html || "<p>This message has no HTML body. Choose Text to read it.</p>";
   return new HTMLRewriter()
@@ -65,6 +65,15 @@ export function preview(html: string) {
             )
           ) {
             element.setAttribute("src", src);
+          } else if (src && !blockExternalImages) {
+            try {
+              const url = new URL(src);
+              if (["https:", "http:"].includes(url.protocol)) {
+                element.setAttribute("src", url.href);
+              }
+            } catch {
+              // Relative images have no useful mailbox destination.
+            }
           }
           if (alt) element.setAttribute("alt", alt);
         }
@@ -75,7 +84,7 @@ export function preview(html: string) {
         headers: {
           ...commonHeaders,
           "Content-Type": "text/html; charset=utf-8",
-          "Content-Security-Policy": previewPolicy,
+          "Content-Security-Policy": policy,
         },
       }),
     );

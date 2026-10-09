@@ -16,13 +16,20 @@ import { MailboxStorage } from "./storage.js";
 
 export interface MailpintEnv {
   MAILBOX: DurableObjectNamespace<Mailbox>;
+  MAILPINT_BLOCK_EXTERNAL_IMAGES?: boolean | "true" | "false";
 }
 
 export class Mailbox extends DurableObject<MailpintEnv> {
   private readonly mailbox: MailboxStorage;
+  private readonly blockExternalImages: boolean;
 
   constructor(ctx: DurableObjectState, env: MailpintEnv) {
     super(ctx, env);
+    this.blockExternalImages = z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .default(false)
+      .transform((value) => value === true || value === "true")
+      .parse(env.MAILPINT_BLOCK_EXTERNAL_IMAGES);
     this.mailbox = new MailboxStorage(ctx.storage);
   }
 
@@ -63,7 +70,9 @@ export class Mailbox extends DurableObject<MailpintEnv> {
         if (url.search) throw new HttpError(400, "Unsupported query parameter");
         if (id !== "latest") z.uuid().parse(id);
         const message = this.mailbox.get(id, !view);
-        return view ? preview(message.HTML) : json(message);
+        return view
+          ? preview(message.HTML, this.blockExternalImages)
+          : json(message);
       }
       throw new HttpError(404, "Not found");
     } catch (error) {

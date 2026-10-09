@@ -12,7 +12,10 @@ export const sample = {
   HTML: '<article style="padding:32px"><h1>Right back where you left off.</h1><a href="https://northstar.test/sign-in?token=synthetic-preview">Sign in to Northstar</a></article>',
 } satisfies Submission;
 
-export async function runtime(persist?: string) {
+export async function runtime(
+  persist?: string,
+  blockExternalImages?: boolean | "true" | "false",
+) {
   const result = await build({
     stdin: {
       contents: 'export { default, Mailbox } from "./dist/cloudflare.js";',
@@ -39,6 +42,14 @@ export async function runtime(persist?: string) {
           },
           exports: { Mailbox: { type: "durable-object", storage: "sqlite" } },
           env: {
+            ...(blockExternalImages === undefined
+              ? {}
+              : {
+                  MAILPINT_BLOCK_EXTERNAL_IMAGES: {
+                    type: "json" as const,
+                    value: blockExternalImages,
+                  },
+                }),
             MAILBOX: {
               type: "durable-object",
               worker: "mailpint-test",
