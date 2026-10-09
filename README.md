@@ -74,3 +74,7 @@ pnpm dev
 The example runs at `http://localhost:8787` with persistent local storage. Restart after source changes.
 
 Run `pnpm validate` for linting, type checks, tests, and a Worker dry-run build. `pnpm test` runs the tests separately. Neither command deploys anything.
+
+## Release
+
+Push a `vX.Y.Z` tag on a commit in `master` matching the version in `package.json`. GitHub Actions validates the package and publishes it to npm using the `NPM_TOKEN` secret.

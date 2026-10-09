@@ -1,0 +1,106 @@
+name: "Release"
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+env:
+  WRANGLER_SEND_METRICS: "false"
+
+jobs:
+  release-checks:
+    name: "Check release tag and commit"
+    runs-on: "ubuntu-latest"
+
+    steps:
+      - name: "Checkout source code"
+        uses: "actions/checkout@v6"
+        with:
+          fetch-depth: 0
+
+      - name: "Check if commit is on master"
+        run: |
+          if ! git merge-base --is-ancestor HEAD origin/master; then
+            echo "Cannot release commits not on the master branch"
+            exit 1
+          fi
+
+      - name: "Check package version against Git tag"
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          EXPECTED_TAG="v$(jq -r '.version' package.json)"
+          if [ "$RELEASE_TAG" != "$EXPECTED_TAG" ]; then
+            echo "Package version mismatch: expected $EXPECTED_TAG, found $RELEASE_TAG"
+            exit 1
+          fi
+
+  validate:
+    name: "Code checks"
+    needs: ["release-checks"]
+    uses: "./.github/workflows/code.yaml"
+
+  build:
+    name: "Build for ${{ matrix.os }}"
+    runs-on: "${{ matrix.os }}"
+    needs: ["release-checks"]
+
+    strategy:
+      matrix:
+        os:
+          - "ubuntu-latest"
+          - "windows-latest"
+          - "macos-latest"
+
+    steps:
+      - name: "Checkout source code"
+        uses: "actions/checkout@v6"
+
+      - name: "Setup pnpm"
+        uses: "pnpm/action-setup@v4"
+
+      - name: "Setup Node.js"
+        uses: "actions/setup-node@v4"
+        with:
+          node-version-file: ".node-version"
+          cache: "pnpm"
+
+      - name: "Install dependencies"
+        run: pnpm install --frozen-lockfile
+
+      - name: "Typecheck and build package"
+        run: pnpm typecheck
+
+  npm-release:
+    name: "Release to npm"
+    runs-on: "ubuntu-latest"
+    needs: ["release-checks", "validate", "build"]
+
+    steps:
+      - name: "Checkout source code"
+        uses: "actions/checkout@v6"
+
+      - name: "Setup pnpm"
+        uses: "pnpm/action-setup@v4"
+
+      - name: "Setup Node.js"
+        uses: "actions/setup-node@v4"
+        with:
+          node-version-file: ".node-version"
+          cache: "pnpm"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: "Install dependencies"
+        run: pnpm install --frozen-lockfile
+
+      - name: "Build package"
+        run: pnpm build
+
+      - name: "Publish package"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm publish --no-git-checks --access public

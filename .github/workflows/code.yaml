@@ -1,0 +1,41 @@
+name: "Code checks"
+
+on:
+  push:
+    branches:
+      - "master"
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  WRANGLER_SEND_METRICS: "false"
+
+jobs:
+  validate:
+    name: "Validate package"
+    runs-on: "ubuntu-latest"
+
+    steps:
+      - name: "Checkout source code"
+        uses: "actions/checkout@v6"
+
+      - name: "Setup pnpm"
+        uses: "pnpm/action-setup@v4"
+
+      - name: "Setup Node.js"
+        uses: "actions/setup-node@v4"
+        with:
+          node-version-file: ".node-version"
+          cache: "pnpm"
+
+      - name: "Install dependencies"
+        run: pnpm install --frozen-lockfile
+
+      - name: "Install Chromium"
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: "Validate package"
+        run: pnpm validate
