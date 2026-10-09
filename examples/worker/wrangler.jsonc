@@ -1,0 +1,20 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "mailpint-example",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-01-01",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MAILBOX",
+        "class_name": "Mailbox"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["Mailbox"]
+    }
+  ]
+}

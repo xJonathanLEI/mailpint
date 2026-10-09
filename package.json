@@ -1,0 +1,44 @@
+{
+  "name": "mailpint",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A pint-sized development inbox for Cloudflare Workers.",
+  "type": "module",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    "./cloudflare": {
+      "types": "./dist/cloudflare.d.ts",
+      "import": "./dist/cloudflare.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/build-ui.mjs",
+    "typecheck": "pnpm build && tsc --noEmit && tsc -p tsconfig.ui.json && tsc -p tsconfig.test.json",
+    "check": "biome check .",
+    "format": "biome format --write .",
+    "dev": "pnpm build && wrangler dev --config examples/worker/wrangler.jsonc",
+    "check:worker": "pnpm build && wrangler deploy --dry-run --config examples/worker/wrangler.jsonc --outdir .wrangler/dry-run",
+    "test": "pnpm build && node --test test/*.test.ts",
+    "validate": "pnpm check && pnpm typecheck && pnpm test && pnpm check:worker"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@cloudflare/workers-types": "5.20261009.1",
+    "@types/node": "24.19.1",
+    "esbuild": "0.28.2",
+    "miniflare": "5.20261006.1-alpha",
+    "playwright": "1.64.0",
+    "typescript": "7.0.2",
+    "wrangler": "4.149.0"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
+  }
+}
