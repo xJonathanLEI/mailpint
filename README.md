@@ -42,22 +42,25 @@ curl http://localhost:8787/api/v1/send \
   }'
 ```
 
-Open the same URL in your browser to filter messages, view HTML or plain text, mark messages unread, and delete them. Click Refresh to load new mail.
+Open the same URL in your browser to filter messages, view HTML or plain text, download attachments, mark messages unread, and delete them. Click Refresh to load new mail.
 
 ## API
 
-| Endpoint                   | Description                                                                                                        |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `POST /api/v1/send`        | Accepts `From`, `To`, `Subject`, `Text`, `HTML`; returns `{"ID":"…"}`. Addresses have `Email` and optional `Name`. |
-| `GET /api/v1/messages`     | Lists newest first. Supports `start` and `limit` (default 50, maximum 500).                                        |
-| `GET /api/v1/message/{ID}` | Retrieves a message and marks it read. Accepts `latest` as an ID.                                                  |
-| `PUT /api/v1/messages`     | Sets read state with `{"IDs":["…"],"Read":true}`. `Read` defaults to false.                                        |
-| `DELETE /api/v1/messages`  | Deletes messages with `{"IDs":["…"]}`. An empty body clears the inbox.                                             |
-| `GET /view/{ID}.html`      | Serves a sandboxed HTML preview.                                                                                   |
+| Endpoint                                 | Description                                                                                                                       |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/send`                      | Accepts `From`, `To`, `Subject`, `Text`, `HTML`, `Attachments`; returns `{"ID":"…"}`. Addresses have `Email` and optional `Name`. |
+| `GET /api/v1/messages`                   | Lists newest first. Supports `start` and `limit` (default 50, maximum 500).                                                       |
+| `GET /api/v1/message/{ID}`               | Retrieves a message and marks it read. Accepts `latest` as an ID.                                                                 |
+| `GET /api/v1/message/{ID}/part/{PartID}` | Downloads an attachment. Accepts `latest` as an ID.                                                                               |
+| `PUT /api/v1/messages`                   | Sets read state with `{"IDs":["…"],"Read":true}`. `Read` defaults to false.                                                       |
+| `DELETE /api/v1/messages`                | Deletes messages with `{"IDs":["…"]}`. An empty body clears the inbox.                                                            |
+| `GET /view/{ID}.html`                    | Serves a sandboxed HTML preview.                                                                                                  |
 
-Omitted or empty `IDs` applies updates/deletions to the whole inbox. Unsupported fields and query parameters are rejected. SMTP, MIME ingestion, attachments, Cc/Bcc, custom headers, tags, forwarding, and Mailpit search are not supported. Message `Size` is the stored JSON size, not a MIME size.
+`Attachments` holds up to 100 `{"Content":"<base64>","Filename":"…","ContentType":"…"}` objects; `ContentType` defaults to `application/octet-stream`. Message summaries report the attachment count, and messages list each attachment's `PartID`, `FileName`, `ContentType`, `ContentID` (always empty) and decoded `Size`.
 
-Requests are limited to 1 MiB. The inbox keeps up to 500 messages and 20 MiB of message data; messages expire after seven days, with cleanup on API access. HTML previews block scripts, forms, nested frames and external stylesheets; HTTP(S) links open in a new tab.
+Omitted or empty `IDs` applies updates/deletions to the whole inbox. Unsupported fields and query parameters are rejected. SMTP, MIME ingestion, inline attachments (`ContentID`), Cc/Bcc, custom headers, tags, forwarding, and Mailpit search are not supported. Message `Size` is the stored JSON size plus decoded attachment bytes, not a MIME size.
+
+Requests are limited to 1 MiB. The inbox keeps up to 500 messages and 20 MiB of message data, including attachments; messages expire after seven days, with cleanup on API access. HTML previews block scripts, forms, nested frames and external stylesheets; HTTP(S) links open in a new tab. Attachments are always served as sandboxed downloads, never rendered.
 
 There is no authentication: anyone with the URL can send, read, and delete mail.
 

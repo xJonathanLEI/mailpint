@@ -4,6 +4,7 @@ import { assets } from "./assets.js";
 import { deleteSchema, readSchema, sendSchema } from "./contracts.js";
 import {
   commonHeaders,
+  download,
   HttpError,
   json,
   methodNotAllowed,
@@ -63,12 +64,21 @@ export class Mailbox extends DurableObject<MailpintEnv> {
         return methodNotAllowed("GET, PUT, DELETE");
       }
       const detail = /^\/api\/v1\/message\/([^/]+)$/.exec(path);
+      const part = /^\/api\/v1\/message\/([^/]+)\/part\/([^/]+)$/.exec(path);
       const view = /^\/view\/([^/]+)\.html$/.exec(path);
-      const id = detail?.[1] ?? view?.[1];
+      const id = detail?.[1] ?? part?.[1] ?? view?.[1];
       if (id) {
         if (request.method !== "GET") return methodNotAllowed("GET");
         if (url.search) throw new HttpError(400, "Unsupported query parameter");
         if (id !== "latest") z.uuid().parse(id);
+        const partId = part?.[2];
+        if (partId !== undefined) {
+          // Part IDs are positive integers in send order; anything else is unknown.
+          if (!/^[1-9]\d{0,2}$/.test(partId)) {
+            throw new HttpError(404, "Attachment not found");
+          }
+          return download(this.mailbox.attachment(id, Number(partId)));
+        }
         const message = this.mailbox.get(id, !view);
         return view
           ? preview(message.HTML, this.blockExternalImages)

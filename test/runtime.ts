@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { build } from "esbuild";
 import { Miniflare } from "miniflare";
 import { z } from "zod";
-import { listingSchema, type Submission } from "../src/contracts.ts";
+import { listingSchema, type sendSchema } from "../src/contracts.ts";
+
+type Submission = z.input<typeof sendSchema>;
 
 export const sample = {
   From: { Name: "Northstar", Email: "hello@northstar.test" },
@@ -81,6 +83,12 @@ export async function capture(mf: Miniflare, input: Submission = sample) {
   });
   assert.equal(response.status, 200, await response.clone().text());
   return z.object({ ID: z.uuid() }).parse(await response.json()).ID;
+}
+
+export function inbox(mf: Miniflare) {
+  return mf.unsafeGetDurableObjectStorage("mailpint-test", "Mailbox", {
+    name: "inbox",
+  });
 }
 
 export async function listing(mf: Miniflare, query = "?limit=500") {
