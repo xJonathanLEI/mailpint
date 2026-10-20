@@ -16,12 +16,38 @@ export const addressSchema = z.strictObject({
   Email: z.email().max(254),
 });
 
+const base64 =
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/][AQgw]==|[A-Za-z0-9+/]{2}[AEIMQUYcgkosw048]=)?$/;
+// A media type with optional parameters; empty means unspecified.
+const mediaType = /^(?:[\w!#$&^.+-]+\/[\w!#$&^.+-]+(?: *;[ -~]*)?)?$/;
+const attachmentInputSchema = z.strictObject({
+  Content: z
+    .string()
+    .regex(base64)
+    .transform(
+      (value) =>
+        Uint8Array.from(atob(value), (character) => character.charCodeAt(0))
+          .buffer,
+    ),
+  Filename: header
+    .min(1)
+    .max(255)
+    .regex(/^\P{Cs}*$/u),
+  ContentType: z
+    .string()
+    .max(255)
+    .regex(mediaType)
+    .optional()
+    .transform((value) => value || "application/octet-stream"),
+});
+
 export const sendSchema = z.strictObject({
   From: addressSchema,
   To: z.array(addressSchema).min(1).max(100),
   Subject: header.default(""),
   Text: z.string().default(""),
   HTML: z.string().default(""),
+  Attachments: z.array(attachmentInputSchema).max(100).default([]),
 });
 
 const idSchema = z.uuid();
@@ -45,9 +71,16 @@ export const summarySchema = z.object({
   Size: z.number().int().nonnegative(),
   Read: z.boolean(),
   Snippet: z.string(),
-  Attachments: z.number(),
+  Attachments: z.number().int().nonnegative(),
   Tags: z.array(z.string()),
   Username: z.string(),
+});
+const attachmentSchema = z.object({
+  PartID: z.string(),
+  FileName: z.string(),
+  ContentType: z.string(),
+  ContentID: z.string(),
+  Size: z.number().int().nonnegative(),
 });
 export const messageSchema = summarySchema
   .omit({
@@ -60,7 +93,7 @@ export const messageSchema = summarySchema
     Date: z.iso.datetime(),
     HTML: z.string(),
     Text: z.string(),
-    Attachments: z.array(z.never()),
+    Attachments: z.array(attachmentSchema),
     Inline: z.array(z.never()),
     ReturnPath: z.string(),
   });

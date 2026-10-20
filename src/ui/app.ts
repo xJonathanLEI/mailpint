@@ -33,6 +33,12 @@ const escapeHtml = (value: string) =>
         return "&#39;";
     }
   });
+const fileSize = (bytes: number) =>
+  bytes < 1024
+    ? `${bytes} B`
+    : bytes < 1024 * 1024
+      ? `${(bytes / 1024).toFixed(1)} KB`
+      : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 const addresses = (message: Pick<Summary, "To">) =>
   message.To.map((address) =>
     address.Name ? `${address.Name} <${address.Email}>` : address.Email,
@@ -231,6 +237,17 @@ function renderReader(message: Message) {
     dateStyle: "medium",
     timeStyle: "long",
   });
+  byId("attachments").hidden = !message.Attachments.length;
+  byId("attachment-list").innerHTML = message.Attachments.map((attachment) => {
+    const name = escapeHtml(attachment.FileName);
+    const size = fileSize(attachment.Size);
+    return `
+      <li><a class="attachment" href="/api/v1/message/${message.ID}/part/${encodeURIComponent(attachment.PartID)}" download aria-label="Download ${name}, ${size}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 6-8.4 8.6a2 2 0 0 0 2.8 2.8l8.4-8.6a4 4 0 1 0-5.6-5.6l-8.4 8.5a6 6 0 1 0 8.5 8.5l8.4-8.5" /></svg>
+        <span class="attachment-name" title="${name}">${name}</span>
+        <span class="attachment-size">${size}</span>
+      </a></li>`;
+  }).join("");
   frame.src = `/view/${message.ID}.html`;
   byId("plain-text").textContent =
     message.Text || "This message has no text body.";

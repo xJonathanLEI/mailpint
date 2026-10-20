@@ -9,6 +9,7 @@ import {
 import { HttpError } from "./http.js";
 
 interface Row extends Record<string, SqlStorageValue> {
+  sequence: number;
   id: string;
   summary: string;
   html: string;
@@ -26,7 +27,7 @@ export class MailboxStorage {
         storage.sql
           .exec<{ version: number }>("SELECT version FROM schema_version")
           .toArray()[0]?.version ?? 0;
-      if (version > 1)
+      if (version > 2)
         throw new Error("Mailbox schema is newer than this package");
       if (version === 0) {
         storage.sql.exec(`
@@ -42,6 +43,19 @@ export class MailboxStorage {
           );
           CREATE INDEX messages_received ON messages(received);
           INSERT INTO schema_version VALUES (1);
+        `);
+      }
+      if (version < 2) {
+        storage.sql.exec(`
+          CREATE TABLE attachments (
+            message INTEGER NOT NULL REFERENCES messages(sequence) ON DELETE CASCADE,
+            part INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            content BLOB NOT NULL,
+            PRIMARY KEY (message, part)
+          );
+          UPDATE schema_version SET version = 2;
         `);
       }
     });
@@ -66,7 +80,14 @@ export class MailboxStorage {
       this.prune(now);
       const ID = crypto.randomUUID();
       const MessageID = `${ID}@mailpint`;
-      const size = new TextEncoder().encode(JSON.stringify(input)).byteLength;
+      const { Attachments, ...fields } = input;
+      const attachmentBytes = Attachments.reduce(
+        (total, attachment) => total + attachment.Content.byteLength,
+        0,
+      );
+      const size =
+        new TextEncoder().encode(JSON.stringify(fields)).byteLength +
+        attachmentBytes;
       const summary: Summary = {
         ID,
         MessageID,
@@ -80,23 +101,35 @@ export class MailboxStorage {
         Read: false,
         Size: size,
         Snippet: input.Text.replace(/\s+/g, " ").trim().slice(0, 250),
-        Attachments: 0,
+        Attachments: Attachments.length,
         Tags: [],
         Username: "",
       };
       const serialized = JSON.stringify(summary);
-      const bytes = new TextEncoder().encode(
-        serialized + input.HTML + input.Text,
-      ).byteLength;
-      this.storage.sql.exec(
-        "INSERT INTO messages (id, received, bytes, summary, html, text) VALUES (?, ?, ?, ?, ?, ?)",
-        ID,
-        now,
-        bytes,
-        serialized,
-        input.HTML,
-        input.Text,
-      );
+      const bytes =
+        new TextEncoder().encode(serialized + input.HTML + input.Text)
+          .byteLength + attachmentBytes;
+      const { sequence } = this.storage.sql
+        .exec<Pick<Row, "sequence">>(
+          "INSERT INTO messages (id, received, bytes, summary, html, text) VALUES (?, ?, ?, ?, ?, ?) RETURNING sequence",
+          ID,
+          now,
+          bytes,
+          serialized,
+          input.HTML,
+          input.Text,
+        )
+        .one();
+      for (const [index, attachment] of Attachments.entries()) {
+        this.storage.sql.exec(
+          "INSERT INTO attachments (message, part, filename, content_type, content) VALUES (?, ?, ?, ?, ?)",
+          sequence,
+          index + 1,
+          attachment.Filename,
+          attachment.ContentType,
+          attachment.Content,
+        );
+      }
       // Keep the newest suffix satisfying both limits, atomically with capture.
       this.storage.sql.exec(
         `
@@ -119,7 +152,10 @@ export class MailboxStorage {
     return this.storage.transactionSync(() => {
       this.prune(now);
       const counts = this.storage.sql
-        .exec<{ total: number; unread: number }>(
+        .exec<{
+          total: number;
+          unread: number;
+        }>(
           "SELECT COUNT(*) AS total, COALESCE(SUM(1 - is_read), 0) AS unread FROM messages",
         )
         .one();
@@ -139,19 +175,20 @@ export class MailboxStorage {
     });
   }
 
+  private find(id: string): Row | undefined {
+    return (
+      id === "latest"
+        ? this.storage.sql.exec<Row>(
+            "SELECT * FROM messages ORDER BY sequence DESC LIMIT 1",
+          )
+        : this.storage.sql.exec<Row>("SELECT * FROM messages WHERE id = ?", id)
+    ).toArray()[0];
+  }
+
   get(id: string, markRead = true, now = Date.now()): Message {
     const message = this.storage.transactionSync((): Message | null => {
       this.prune(now);
-      const row = (
-        id === "latest"
-          ? this.storage.sql.exec<Row>(
-              "SELECT * FROM messages ORDER BY sequence DESC LIMIT 1",
-            )
-          : this.storage.sql.exec<Row>(
-              "SELECT * FROM messages WHERE id = ?",
-              id,
-            )
-      ).toArray()[0];
+      const row = this.find(id);
       if (!row) return null;
       if (markRead)
         this.storage.sql.exec(
@@ -165,12 +202,27 @@ export class MailboxStorage {
         Attachments: _attachments,
         ...rest
       } = this.summary(row);
+      const attachments = this.storage.sql.exec<{
+        part: number;
+        filename: string;
+        content_type: string;
+        size: number;
+      }>(
+        "SELECT part, filename, content_type, length(content) AS size FROM attachments WHERE message = ? ORDER BY part",
+        row.sequence,
+      );
       return {
         ...rest,
         Date: Created,
         HTML: row.html,
         Text: row.text,
-        Attachments: [],
+        Attachments: attachments.toArray().map((attachment) => ({
+          PartID: String(attachment.part),
+          FileName: attachment.filename,
+          ContentType: attachment.content_type,
+          ContentID: "",
+          Size: attachment.size,
+        })),
         Inline: [],
         ReturnPath: rest.From.Email,
       };
@@ -178,6 +230,31 @@ export class MailboxStorage {
     // Commit expiry cleanup even when the requested message is already gone.
     if (!message) throw new HttpError(404, "Message not found");
     return message;
+  }
+
+  attachment(id: string, part: number, now = Date.now()) {
+    const attachment = this.storage.transactionSync(() => {
+      this.prune(now);
+      const row = this.find(id);
+      if (!row) return undefined;
+      return this.storage.sql
+        .exec<{
+          filename: string;
+          content_type: string;
+          content: ArrayBuffer;
+        }>(
+          "SELECT filename, content_type, content FROM attachments WHERE message = ? AND part = ?",
+          row.sequence,
+          part,
+        )
+        .toArray()[0];
+    });
+    if (!attachment) throw new HttpError(404, "Attachment not found");
+    return {
+      content: attachment.content,
+      filename: attachment.filename,
+      contentType: attachment.content_type,
+    };
   }
 
   setRead(ids: string[], read: boolean) {

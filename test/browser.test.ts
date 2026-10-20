@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { chromium } from "playwright";
 import { capture, listing, runtime, sample } from "./runtime.ts";
 
-test("read, refresh, mark unread and delete a message", {
+test("read, download an attachment, refresh, mark unread and delete a message", {
   timeout: 60_000,
 }, async () => {
   const mf = await runtime();
@@ -12,7 +13,16 @@ test("read, refresh, mark unread and delete a message", {
     throw error;
   });
   try {
-    await capture(mf);
+    const id = await capture(mf, {
+      ...sample,
+      Attachments: [
+        {
+          Content: Buffer.from("%PDF-1.7 synthetic").toString("base64"),
+          Filename: "Subscription agreement.pdf",
+          ContentType: "application/pdf",
+        },
+      ],
+    });
     const page = await browser.newPage({
       viewport: { width: 1440, height: 1000 },
     });
@@ -22,6 +32,22 @@ test("read, refresh, mark unread and delete a message", {
       .filter({ hasText: sample.Subject })
       .waitFor();
     await page.frameLocator("#html-body").locator("h1").waitFor();
+    const attachment = page
+      .getByRole("region", { name: "Attachments" })
+      .getByRole("link", { name: "Download Subscription agreement.pdf, 18 B" });
+    assert.equal(
+      await attachment.getAttribute("href"),
+      `/api/v1/message/${id}/part/1`,
+    );
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      attachment.click(),
+    ]);
+    assert.equal(download.suggestedFilename(), "Subscription agreement.pdf");
+    assert.equal(
+      await readFile(await download.path(), "utf8"),
+      "%PDF-1.7 synthetic",
+    );
     await page.locator("#view-text").click();
     assert.equal(await page.locator("#plain-text").textContent(), sample.Text);
     await page.locator("#toggle-read").click();

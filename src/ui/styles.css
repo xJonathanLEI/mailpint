@@ -463,6 +463,61 @@ h1 {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.attachments {
+  margin: 18px 0 0 50px;
+}
+.attachments h3 {
+  margin: 0 0 8px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.attachments ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.attachments li {
+  min-width: 0;
+  max-width: 100%;
+}
+.attachment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--subtle);
+  color: var(--ink);
+  font-size: 12px;
+  text-decoration: none;
+}
+.attachment:hover {
+  background: var(--selected);
+}
+.attachment svg {
+  color: var(--accent);
+}
+.attachment-name {
+  min-width: 0;
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attachment-size {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 .body-controls {
   display: flex;
   align-items: center;
@@ -679,7 +734,8 @@ dialog::backdrop {
   .body-controls {
     padding: 0 24px;
   }
-  .message-meta {
+  .message-meta,
+  .attachments {
     margin-left: 0;
   }
 }
@@ -812,7 +868,8 @@ dialog::backdrop {
 @media (forced-colors: active) {
   button,
   .message-row,
-  .avatar {
+  .avatar,
+  .attachment {
     border: 1px solid ButtonText;
   }
   .message-row.selected {

@@ -25,6 +25,30 @@ export function ok() {
   });
 }
 
+function contentDisposition(filename: string) {
+  const fallback = filename.replace(/[^ -~]|["\\%]/g, "_");
+  const encoded = encodeURIComponent(filename).replace(
+    /['()*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
+
+export function download(attachment: {
+  content: ArrayBuffer;
+  filename: string;
+  contentType: string;
+}) {
+  return new Response(attachment.content, {
+    headers: {
+      ...commonHeaders,
+      "Content-Type": attachment.contentType,
+      "Content-Disposition": contentDisposition(attachment.filename),
+      "Content-Security-Policy": "default-src 'none'; sandbox",
+    },
+  });
+}
+
 export function methodNotAllowed(allow: string) {
   return new Response("Method not allowed", {
     status: 405,
